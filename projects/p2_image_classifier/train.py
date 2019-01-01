@@ -13,18 +13,27 @@ import time
 import os
 import sys
 import json
+import argparse
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+parser = argparse.ArgumentParser()
+parser.add_argument('data_dir', type=str)
+parser.add_argument('--save_dir', type=str, default='checkpoint.pth')
+parser.add_argument('--arch', type=str, default='vgg13')
+parser.add_argument('--learning_rate', type=float, default=0.001)
+parser.add_argument('--hidden_units', type=int, default=512)
+parser.add_argument('--epochs', type=int, default=5)
+parser.add_argument('--gpu', action='store_true', default=False)
+
+args = parser.parse_args()
+
+
+device = torch.device('cuda' if torch.cuda.is_available() & args.gpu else 'cpu')
 print('Device: {}'.format(device))
 
-# Get args
-args = sys.argv
-data_dir = args[1]
-
 # Load data
-train_dir = data_dir + '/train'
-valid_dir = data_dir + '/valid'
-test_dir = data_dir + '/test'
+train_dir = args.data_dir + '/train'
+valid_dir = args.data_dir + '/valid'
+test_dir = args.data_dir + '/test'
 print('Train dir: {}'.format(train_dir))
 print('Valid dir: {}'.format(valid_dir))
 print('Test dir: {}'.format(test_dir))
@@ -67,7 +76,15 @@ with open('cat_to_name.json', 'r') as f:
 print(len(cat_to_name))
 
 # Model
-model = models.vgg13(pretrained=True)
+if args.arch == "vgg13":
+    model = models.vgg13(pretrained=True)
+elif args.arch == "vgg16":
+    model = models.vgg16(pretrained=True)
+elif args.arch == "vgg19":
+    model = models.vgg19(pretrained=True)
+else:
+    model = models.vgg13(pretrained=True)
+    
 for param in model.parameters():
     param.requires_grad = False
     
@@ -75,16 +92,16 @@ classifier = nn.Sequential(OrderedDict([
                           ('fc1', nn.Linear(25088, 4096)),
                           ('relu', nn.ReLU()),
                           ('dropout', nn.Dropout(p=0.3)),
-                          ('fc2', nn.Linear(4096, 1024)),
+                          ('fc2', nn.Linear(4096, args.hidden_units)),
                           ('relu', nn.ReLU()),
                           ('dropout', nn.Dropout(p=0.3)),
-                          ('fc3', nn.Linear(1024, 102)),
+                          ('fc3', nn.Linear(args.hidden_units, 102)),
                           ('output', nn.LogSoftmax(dim=1))
 ]))
 
 model.classifier = classifier
 criterion = nn.NLLLoss()
-optimizer = optim.Adam(model.classifier.parameters(), lr=0.001)
+optimizer = optim.Adam(model.classifier.parameters(), lr=args.learning_rate)
 
 # Train
 def train(model, train_loader, optimizer, criterion, epochs, print_every):
@@ -142,7 +159,7 @@ def validate(model, data_loader):
 
     return valid_loss/steps,100 * correct/total # loss, accuracy 
 
-epochs = 5
+epochs = args.epochs
 print_every = 5
 train(model, train_loader, optimizer, criterion, epochs, print_every)
 print("Done training.")
@@ -151,7 +168,7 @@ print("Done training.")
 model.class_to_idx = train_data.class_to_idx
 
 checkpoint_dict = {
-    'arch': 'vgg13',
+    'arch': args.arch,
     'state_dict': model.state_dict(),
     'classifier': classifier,
     'class_to_idx': model.class_to_idx,
@@ -159,5 +176,5 @@ checkpoint_dict = {
     'epochs': epochs
 }
 
-torch.save(checkpoint_dict, 'checkpoint.pth')
-print("Saved checkpoint.pth")
+torch.save(checkpoint_dict, args.save_dir)
+print("Saved {}".format(args.save_dir))

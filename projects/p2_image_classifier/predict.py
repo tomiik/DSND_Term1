@@ -13,14 +13,21 @@ import time
 import os
 import sys
 import json
+import argparse
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print('Device: {}'.format(device))
 
 # Get args
-args = sys.argv
-img_path = args[1]
-checkpoint_name = args[2]
+parser = argparse.ArgumentParser()
+parser.add_argument('input', type=str)
+parser.add_argument('checkpoint', type=str)
+parser.add_argument('--top_k', type=int, default=5)
+parser.add_argument('--category_names', type=str, default='cat_to_name.json')
+parser.add_argument('--gpu', action='store_true', default=False)
+
+args = parser.parse_args()
+
+device = torch.device('cuda' if torch.cuda.is_available() & args.gpu else 'cpu')
+print('Device: {}'.format(device))
 
 
 def load_checkpoint(path):
@@ -107,22 +114,18 @@ def predict(image_path, model, k=5):
 
 
 # Load checkpoint
-model = load_checkpoint(checkpoint_name)
+model = load_checkpoint(args.checkpoint)
 model.eval()
 model.train()
 
 # Map Label
-with open('cat_to_name.json', 'r') as f:
+with open(args.category_names, 'r') as f:
     cat_to_name = json.load(f)
     
-# Process input image
-processed_img = process_img(img_path)
-
 # Predict
-probs, classes, flowers = predict(img_path, model, topk)
+probs, classes, flowers = predict(args.input, model, args.top_k)
 
 
-print(probs)
-print(classes)
-print(flowers)
-print("Predicted class: {}, probability: {:.3f}".format(topk_class, topk_probs))
+print('probs: ', probs)
+print('classes: ', classes)
+print('flowers: ', flowers)
